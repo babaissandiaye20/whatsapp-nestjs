@@ -20,6 +20,7 @@ export class WhatsappService implements OnModuleInit {
   private isReady = false;
   private currentQR = '';
   private messageLogs: Map<string, MessageLog> = new Map();
+  private keepAliveInterval: NodeJS.Timeout;
 
   async onModuleInit() {
     this.client = new Client({
@@ -47,6 +48,9 @@ export class WhatsappService implements OnModuleInit {
           '--disable-features=VizDisplayCompositor',
           '--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         ],
+        timeout: 0,
+        handleSIGTERM: false,
+        handleSIGINT: false,
       },
       webVersionCache: {
         type: 'remote',
@@ -64,6 +68,9 @@ export class WhatsappService implements OnModuleInit {
     this.client.on('ready', () => {
       this.isReady = true;
       console.log('✅ WhatsApp Client prêt!');
+      
+      // Démarrer le keep-alive
+      this.startKeepAlive();
     });
 
     this.client.on('authenticated', () => {
@@ -80,13 +87,16 @@ export class WhatsappService implements OnModuleInit {
       this.isReady = false;
       this.currentQR = '';
       
+      // Arrêter le keep-alive
+      this.stopKeepAlive();
+      
       // Tentative de reconnexion après déconnexion
       setTimeout(() => {
         console.log('🔄 Tentative de reconnexion...');
-        this.client.initialize().catch(err => {
+        this.onModuleInit().catch(err => {
           console.error('❌ Erreur reconnexion:', err);
         });
-      }, 5000);
+      }, 10000);
     });
 
     this.client.on('auth_failure', (msg) => {
@@ -217,8 +227,35 @@ export class WhatsappService implements OnModuleInit {
     };
   }
 
+  private startKeepAlive() {
+    console.log('🔄 Démarrage du keep-alive...');
+    
+    // Keep-alive toutes les 30 secondes
+    this.keepAliveInterval = setInterval(async () => {
+      try {
+        if (this.isReady && this.client) {
+          // Ping silencieux pour maintenir la connexion
+          const info = await this.client.info;
+          console.log('💓 Keep-alive ping réussi', new Date().toISOString());
+        }
+      } catch (error) {
+        console.error('❌ Erreur keep-alive:', error.message);
+      }
+    }, 30000);
+  }
+
+  private stopKeepAlive() {
+    if (this.keepAliveInterval) {
+      clearInterval(this.keepAliveInterval);
+      this.keepAliveInterval = null;
+      console.log('🛑 Keep-alive arrêté');
+    }
+  }
+
   async resetWhatsApp() {
     try {
+      this.stopKeepAlive();
+      
       if (this.client) {
         await this.client.destroy();
       }
