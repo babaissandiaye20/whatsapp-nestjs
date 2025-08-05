@@ -12,7 +12,7 @@ export class WhatsappController {
   @Post('send')
   @ApiOperation({ 
     summary: 'Envoyer un message WhatsApp',
-    description: 'Envoie un message WhatsApp de manière dynamique avec logging automatique'
+    description: 'Envoie un message WhatsApp depuis le numéro connecté (auto-détecté après scan QR)'
   })
   @ApiBody({
     description: 'Données pour envoyer un message',
@@ -20,9 +20,15 @@ export class WhatsappController {
       example1: {
         summary: 'Message de validation',
         value: {
-          from: '33123456789',
-          to: '33987654321',
+          to: '221123456789',
           message: 'Votre code de validation est: 123456'
+        }
+      },
+      example2: {
+        summary: 'Message marketing',
+        value: {
+          to: '221987654321',
+          message: 'Bonjour ! Profitez de nos offres spéciales aujourd\'hui.'
         }
       }
     }
@@ -31,17 +37,17 @@ export class WhatsappController {
   @ApiResponse({ status: 400, description: 'Données manquantes ou invalides' })
   @ApiResponse({ status: 500, description: 'Erreur lors de l\'envoi du message' })
   async sendMessage(@Body() body: SendMessageDto) {
-    const { from, to, message } = body;
+    const { to, message } = body;
 
-    if (!from || !to || !message) {
+    if (!to || !message) {
       throw new HttpException(
-        'Les champs from, to et message sont requis',
+        'Les champs to et message sont requis',
         HttpStatus.BAD_REQUEST,
       );
     }
 
     try {
-      const result = await this.whatsappService.sendMessage(from, to, message);
+      const result = await this.whatsappService.sendMessage(to, message);
       return result;
     } catch (error) {
       throw new HttpException(

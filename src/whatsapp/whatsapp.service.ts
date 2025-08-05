@@ -31,7 +31,7 @@ export class WhatsappService implements OnModuleInit {
   private currentQR = '';
   private messageLogs: Map<string, MessageLog> = new Map();
   private keepAliveInterval: NodeJS.Timeout;
-  private businessNumber = '221786360662'; // Numéro WhatsApp Business fixe
+  private businessNumber: string = null; // Auto-détecté après connexion
   private logger = P({ level: 'info' });
   
   constructor() {
@@ -61,7 +61,7 @@ export class WhatsappService implements OnModuleInit {
     const { version, isLatest } = await fetchLatestBaileysVersion();
     
     console.log(`📱 Version Baileys: ${version.join('.')}, Latest: ${isLatest}`);
-    console.log(`📱 Numéro Business configuré: +${this.businessNumber}`);
+    console.log(`📱 En attente de connexion WhatsApp...`);
 
     this.sock = makeWASocket({
       version,
@@ -84,8 +84,9 @@ export class WhatsappService implements OnModuleInit {
       
       if (qr) {
         this.currentQR = qr;
-        console.log('📱 QR Code généré pour +221786360662');
-        console.log('📱 Scannez ce QR avec WhatsApp Business sur le téléphone:', this.businessNumber);
+        console.log('📱 QR Code généré!');
+        console.log('📱 Scannez ce QR avec votre téléphone WhatsApp');
+        console.log('📱 Une fois connecté, votre numéro sera automatiquement détecté');
         qrcode.generate(qr, { small: true });
       }
 
@@ -104,8 +105,21 @@ export class WhatsappService implements OnModuleInit {
       } else if (connection === 'open') {
         this.isReady = true;
         this.currentQR = '';
-        console.log('✅ WhatsApp connecté avec succès!');
-        console.log('📱 Numéro Business actif:', this.businessNumber);
+        
+        // Auto-détecter le numéro connecté
+        setTimeout(async () => {
+          try {
+            const me = this.sock.user;
+            if (me && me.id) {
+              this.businessNumber = me.id.split(':')[0];
+              console.log('✅ WhatsApp connecté avec succès!');
+              console.log('📱 Numéro détecté automatiquement:', `+${this.businessNumber}`);
+            }
+          } catch (error) {
+            console.log('⚠️ Impossible de détecter le numéro automatiquement');
+          }
+        }, 2000);
+        
         this.startKeepAlive();
       }
     });
@@ -123,9 +137,13 @@ export class WhatsappService implements OnModuleInit {
     });
   }
 
-  async sendMessage(from: string, to: string, message: string) {
+  async sendMessage(to: string, message: string) {
     if (!this.isReady || !this.sock) {
-      throw new Error(`WhatsApp Business ${this.businessNumber} not ready. Please scan QR code first.`);
+      throw new Error(`WhatsApp not ready. Please scan QR code first.`);
+    }
+
+    if (!this.businessNumber) {
+      throw new Error('Numéro WhatsApp non détecté. Reconnectez-vous.');
     }
 
     try {
@@ -136,7 +154,7 @@ export class WhatsappService implements OnModuleInit {
       await this.sock.sendMessage(jid, { text: message });
 
       // Logger le message
-      this.logMessage(from, to, message, 'sent');
+      this.logMessage(to, message, 'sent');
 
       return {
         success: true,
@@ -147,7 +165,7 @@ export class WhatsappService implements OnModuleInit {
         timestamp: new Date(),
       };
     } catch (error) {
-      this.logMessage(from, to, message, 'failed');
+      this.logMessage(to, message, 'failed');
 
       return {
         success: false,
@@ -161,8 +179,10 @@ export class WhatsappService implements OnModuleInit {
     }
   }
 
-  private logMessage(from: string, to: string, message: string, status: 'sent' | 'failed') {
-    const key = this.businessNumber; // Utiliser le numéro business comme clé
+  private logMessage(to: string, message: string, status: 'sent' | 'failed') {
+    if (!this.businessNumber) return;
+    
+    const key = this.businessNumber;
     
     if (!this.messageLogs.has(key)) {
       this.messageLogs.set(key, {
@@ -191,6 +211,14 @@ export class WhatsappService implements OnModuleInit {
   }
 
   getMessageLogs(numero?: string) {
+    if (!this.businessNumber) {
+      return {
+        numero: 'Non connecté',
+        count: 0,
+        messages: [],
+      };
+    }
+
     if (numero && numero !== this.businessNumber) {
       return {
         numero,
@@ -241,9 +269,9 @@ export class WhatsappService implements OnModuleInit {
   getStatus() {
     return {
       isReady: this.isReady,
-      businessNumber: this.businessNumber,
-      totalNumbers: 1, // Un seul numéro business
-      totalMessages: this.messageLogs.get(this.businessNumber)?.count || 0,
+      businessNumber: this.businessNumber || 'Non connecté',
+      totalNumbers: this.businessNumber ? 1 : 0,
+      totalMessages: this.businessNumber ? (this.messageLogs.get(this.businessNumber)?.count || 0) : 0,
     };
   }
 

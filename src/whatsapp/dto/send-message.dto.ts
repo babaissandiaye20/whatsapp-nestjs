@@ -2,14 +2,8 @@ import { ApiProperty } from '@nestjs/swagger';
 
 export class SendMessageDto {
   @ApiProperty({
-    description: 'Numéro expéditeur (avec indicatif pays)',
-    example: '33123456789',
-  })
-  from: string;
-
-  @ApiProperty({
     description: 'Numéro destinataire (avec indicatif pays)',
-    example: '33987654321',
+    example: '221123456789',
   })
   to: string;
 
