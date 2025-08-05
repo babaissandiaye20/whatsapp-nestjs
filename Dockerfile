@@ -2,7 +2,6 @@
 FROM node:20-bullseye-slim
 
 # Variables d'environnement
-ENV NODE_ENV=production
 ENV PORT=4500
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 
@@ -25,8 +24,9 @@ RUN npm ci && npm cache clean --force
 COPY . .
 RUN npm run build
 
-# Supprimer les devDependencies après le build
+# Supprimer les devDependencies après le build et définir NODE_ENV
 RUN npm prune --omit=dev
+ENV NODE_ENV=production
 
 # Créer un utilisateur non-root
 RUN groupadd -r whatsapp && useradd -r -g whatsapp whatsapp
