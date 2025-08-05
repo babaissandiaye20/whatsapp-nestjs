@@ -31,8 +31,9 @@ ENV NODE_ENV=production
 # Créer un utilisateur non-root
 RUN groupadd -r whatsapp && useradd -r -g whatsapp whatsapp
 
-# Créer les dossiers nécessaires
+# Créer les dossiers nécessaires avec permissions étendues
 RUN mkdir -p /app/.wwebjs_auth /app/.wwebjs_cache && \
+    chmod -R 755 /app/.wwebjs_auth /app/.wwebjs_cache && \
     chown -R whatsapp:whatsapp /app
 
 # Variables d'environnement pour Puppeteer

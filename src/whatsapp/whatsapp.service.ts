@@ -1,7 +1,17 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
-import { Client } from 'whatsapp-web.js';
+import makeWASocket, { 
+  ConnectionState, 
+  WASocket, 
+  AuthenticationState,
+  useMultiFileAuthState,
+  DisconnectReason,
+  fetchLatestBaileysVersion
+} from '@whiskeysockets/baileys';
 import * as qrcode from 'qrcode-terminal';
 import * as QRCode from 'qrcode';
+import * as fs from 'fs';
+import * as path from 'path';
+import P from 'pino';
 
 export interface MessageLog {
   numero: string;
@@ -16,126 +26,134 @@ export interface MessageLog {
 
 @Injectable()
 export class WhatsappService implements OnModuleInit {
-  private client: Client;
+  private sock: WASocket;
   private isReady = false;
   private currentQR = '';
   private messageLogs: Map<string, MessageLog> = new Map();
   private keepAliveInterval: NodeJS.Timeout;
+  private businessNumber = '221786360662'; // Numéro WhatsApp Business fixe
+  private logger = P({ level: 'info' });
+  
+  constructor() {
+    this.ensureSessionDirectory();
+  }
+
+  private ensureSessionDirectory() {
+    const sessionPath = path.join(process.cwd(), 'auth_info_baileys');
+    if (!fs.existsSync(sessionPath)) {
+      fs.mkdirSync(sessionPath, { recursive: true });
+      console.log('📁 Dossier de sessions Baileys créé:', sessionPath);
+    }
+  }
 
   async onModuleInit() {
-    this.client = new Client({
-      authStrategy: new (await import('whatsapp-web.js')).LocalAuth({
-        clientId: `whatsapp-${Date.now()}`,
-        dataPath: './.wwebjs_auth'
-      }),
-      puppeteer: {
-        headless: true,
-        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-        args: [
-          '--no-sandbox', 
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-accelerated-2d-canvas',
-          '--no-first-run',
-          '--no-zygote',
-          '--disable-gpu',
-          '--disable-background-timer-throttling',
-          '--disable-backgrounding-occluded-windows',
-          '--disable-renderer-backgrounding',
-          '--disable-extensions',
-          '--disable-default-apps',
-          '--disable-web-security',
-          '--disable-features=VizDisplayCompositor',
-          '--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        ],
-        timeout: 0,
-        handleSIGTERM: false,
-        handleSIGINT: false,
-      },
-      webVersionCache: {
-        type: 'remote',
-        remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html',
+    try {
+      await this.initializeWhatsApp();
+    } catch (error) {
+      console.error('❌ Erreur initialisation WhatsApp:', error);
+      // Retry après 10 secondes
+      setTimeout(() => this.onModuleInit(), 10000);
+    }
+  }
+
+  private async initializeWhatsApp() {
+    const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
+    const { version, isLatest } = await fetchLatestBaileysVersion();
+    
+    console.log(`📱 Version Baileys: ${version.join('.')}, Latest: ${isLatest}`);
+    console.log(`📱 Numéro Business configuré: +${this.businessNumber}`);
+
+    this.sock = makeWASocket({
+      version,
+      logger: this.logger,
+      printQRInTerminal: false,
+      auth: state,
+      connectTimeoutMs: 60000,
+      defaultQueryTimeoutMs: 0,
+      keepAliveIntervalMs: 10000,
+      emitOwnEvents: true,
+      fireInitQueries: true,
+      generateHighQualityLinkPreview: true,
+      syncFullHistory: false,
+      markOnlineOnConnect: true,
+    });
+
+    // Événements de connexion
+    this.sock.ev.on('connection.update', (update: Partial<ConnectionState>) => {
+      const { connection, lastDisconnect, qr } = update;
+      
+      if (qr) {
+        this.currentQR = qr;
+        console.log('📱 QR Code généré pour +221786360662');
+        console.log('📱 Scannez ce QR avec WhatsApp Business sur le téléphone:', this.businessNumber);
+        qrcode.generate(qr, { small: true });
+      }
+
+      if (connection === 'close') {
+        const shouldReconnect = 
+          (lastDisconnect?.error as any)?.output?.statusCode !== DisconnectReason.loggedOut;
+        
+        console.log('❌ Connexion fermée. Reconnexion:', shouldReconnect);
+        
+        if (shouldReconnect) {
+          setTimeout(() => this.initializeWhatsApp(), 5000);
+        } else {
+          this.isReady = false;
+          this.currentQR = '';
+        }
+      } else if (connection === 'open') {
+        this.isReady = true;
+        this.currentQR = '';
+        console.log('✅ WhatsApp connecté avec succès!');
+        console.log('📱 Numéro Business actif:', this.businessNumber);
+        this.startKeepAlive();
       }
     });
 
-    this.client.on('qr', (qr) => {
-      this.currentQR = qr;
-      console.log('📱 QR Code généré! URL:', qr);
-      console.log('📱 QR Code length:', qr.length);
-      qrcode.generate(qr, { small: true });
-    });
+    // Sauvegarder les credentials
+    this.sock.ev.on('creds.update', saveCreds);
 
-    this.client.on('ready', () => {
-      this.isReady = true;
-      console.log('✅ WhatsApp Client prêt!');
-      
-      // Démarrer le keep-alive
-      this.startKeepAlive();
+    // Événements de messages reçus
+    this.sock.ev.on('messages.upsert', ({ messages }) => {
+      for (const message of messages) {
+        if (!message.key.fromMe && message.message) {
+          console.log('📨 Message reçu de:', message.key.remoteJid);
+        }
+      }
     });
-
-    this.client.on('authenticated', () => {
-      console.log('✅ Client authentifié avec succès!');
-    });
-
-    this.client.on('loading_screen', (percent, message) => {
-      console.log(`🔄 Chargement: ${percent}% - ${message}`);
-    });
-
-    this.client.on('disconnected', (reason) => {
-      console.log('❌ Client déconnecté:', reason);
-      console.log('❌ Raison détaillée:', JSON.stringify(reason));
-      this.isReady = false;
-      this.currentQR = '';
-      
-      // Arrêter le keep-alive
-      this.stopKeepAlive();
-      
-      // Tentative de reconnexion après déconnexion
-      setTimeout(() => {
-        console.log('🔄 Tentative de reconnexion...');
-        this.onModuleInit().catch(err => {
-          console.error('❌ Erreur reconnexion:', err);
-        });
-      }, 10000);
-    });
-
-    this.client.on('auth_failure', (msg) => {
-      console.error('❌ Échec d\'authentification:', msg);
-      this.currentQR = '';
-    });
-
-    await this.client.initialize();
   }
 
   async sendMessage(from: string, to: string, message: string) {
-    if (!this.isReady) {
-      throw new Error('WhatsApp client not ready. Scan QR code first.');
+    if (!this.isReady || !this.sock) {
+      throw new Error(`WhatsApp Business ${this.businessNumber} not ready. Please scan QR code first.`);
     }
 
     try {
-      const chatId = to.includes('@c.us') ? to : `${to}@c.us`;
-      await this.client.sendMessage(chatId, message);
+      // Formater le numéro de destination
+      const jid = to.includes('@s.whatsapp.net') ? to : `${to}@s.whatsapp.net`;
+      
+      // Envoyer le message
+      await this.sock.sendMessage(jid, { text: message });
 
-      // Log the message
+      // Logger le message
       this.logMessage(from, to, message, 'sent');
 
       return {
         success: true,
         message: 'Message envoyé avec succès',
-        from,
+        from: this.businessNumber,
         to,
         content: message,
         timestamp: new Date(),
       };
     } catch (error) {
-      // Log failed message
       this.logMessage(from, to, message, 'failed');
 
       return {
         success: false,
         message: 'Erreur lors de l\'envoi',
         error: error.message,
-        from,
+        from: this.businessNumber,
         to,
         content: message,
         timestamp: new Date(),
@@ -144,11 +162,11 @@ export class WhatsappService implements OnModuleInit {
   }
 
   private logMessage(from: string, to: string, message: string, status: 'sent' | 'failed') {
-    const key = from;
+    const key = this.businessNumber; // Utiliser le numéro business comme clé
     
     if (!this.messageLogs.has(key)) {
       this.messageLogs.set(key, {
-        numero: from,
+        numero: this.businessNumber,
         count: 0,
         messages: [],
       });
@@ -166,28 +184,33 @@ export class WhatsappService implements OnModuleInit {
       status,
     });
 
-    // Keep only last 100 messages per number
+    // Garder seulement les 100 derniers messages
     if (log.messages.length > 100) {
       log.messages = log.messages.slice(-100);
     }
   }
 
   getMessageLogs(numero?: string) {
-    if (numero) {
-      return this.messageLogs.get(numero) || {
+    if (numero && numero !== this.businessNumber) {
+      return {
         numero,
         count: 0,
         messages: [],
       };
     }
 
-    return Array.from(this.messageLogs.values());
+    return this.messageLogs.get(this.businessNumber) || {
+      numero: this.businessNumber,
+      count: 0,
+      messages: [],
+    };
   }
 
   getQRCode() {
     return {
       qr: this.currentQR,
       isReady: this.isReady,
+      businessNumber: this.businessNumber,
     };
   }
 
@@ -197,7 +220,6 @@ export class WhatsappService implements OnModuleInit {
     }
 
     try {
-      // Générer l'image QR code en PNG avec haute qualité
       const qrBuffer = await QRCode.toBuffer(this.currentQR, {
         type: 'png',
         width: 512,
@@ -219,23 +241,20 @@ export class WhatsappService implements OnModuleInit {
   getStatus() {
     return {
       isReady: this.isReady,
-      totalNumbers: this.messageLogs.size,
-      totalMessages: Array.from(this.messageLogs.values()).reduce(
-        (total, log) => total + log.count,
-        0,
-      ),
+      businessNumber: this.businessNumber,
+      totalNumbers: 1, // Un seul numéro business
+      totalMessages: this.messageLogs.get(this.businessNumber)?.count || 0,
     };
   }
 
   private startKeepAlive() {
-    console.log('🔄 Démarrage du keep-alive...');
+    console.log('🔄 Démarrage du keep-alive pour', this.businessNumber);
     
-    // Keep-alive toutes les 30 secondes
     this.keepAliveInterval = setInterval(async () => {
       try {
-        if (this.isReady && this.client) {
-          // Ping silencieux pour maintenir la connexion
-          const info = await this.client.info;
+        if (this.isReady && this.sock) {
+          // Ping silencieux
+          await this.sock.query({ tag: 'iq', attrs: { type: 'get', xmlns: 'w:ping' } });
           console.log('💓 Keep-alive ping réussi', new Date().toISOString());
         }
       } catch (error) {
@@ -256,18 +275,26 @@ export class WhatsappService implements OnModuleInit {
     try {
       this.stopKeepAlive();
       
-      if (this.client) {
-        await this.client.destroy();
+      if (this.sock) {
+        this.sock.ws.close();
       }
+      
       this.isReady = false;
       this.currentQR = '';
       
-      // Reinitialize client
-      await this.onModuleInit();
+      // Reinitialiser
+      await this.initializeWhatsApp();
       
-      return { success: true, message: 'WhatsApp client reset successfully' };
+      return { 
+        success: true, 
+        message: `WhatsApp Business ${this.businessNumber} reset successfully` 
+      };
     } catch (error) {
-      return { success: false, message: 'Failed to reset WhatsApp client', error: error.message };
+      return { 
+        success: false, 
+        message: 'Failed to reset WhatsApp Business', 
+        error: error.message 
+      };
     }
   }
 }
