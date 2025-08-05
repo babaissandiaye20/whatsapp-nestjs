@@ -6,28 +6,24 @@ ENV NODE_ENV=production
 ENV PORT=4500
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 
-# Installer les dépendances système minimales
-RUN apt-get update && apt-get install -y \
-    wget \
-    gnupg \
-    chromium \
-    fonts-liberation \
-    --no-install-recommends && \
-    rm -rf /var/lib/apt/lists/*
+# Installer les dépendances système minimales en une seule couche
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    wget=1.21-1+deb11u2 \
+    gnupg=2.2.27-2+deb11u2 \
+    chromium=120.0.6099.224-1~deb11u1 \
+    fonts-liberation=1:1.07.4-11 \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 WORKDIR /app
 
-# Copier les fichiers de package
+# Copier les fichiers de package et installer les dépendances
 COPY package*.json ./
+RUN npm ci && npm cache clean --force
 
-# Installer les dépendances
-RUN npm ci --omit=dev && npm cache clean --force
-
-# Copier le code source
+# Copier le code source et builder
 COPY . .
-
-# Builder l'application
-RUN npm run build
+RUN npm run build && npm prune --omit=dev
 
 # Créer un utilisateur non-root
 RUN groupadd -r whatsapp && useradd -r -g whatsapp whatsapp

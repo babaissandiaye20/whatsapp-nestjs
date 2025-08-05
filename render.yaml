@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: whatsapp-nestjs
+    env: node
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start:prod
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 4500
+      - key: PUPPETEER_SKIP_CHROMIUM_DOWNLOAD
+        value: true
+      - key: PUPPETEER_EXECUTABLE_PATH
+        value: /usr/bin/google-chrome
+    healthCheckPath: /whatsapp/health

@@ -24,6 +24,7 @@ export class WhatsappService implements OnModuleInit {
     this.client = new Client({
       puppeteer: {
         headless: true,
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
         args: [
           '--no-sandbox', 
           '--disable-setuid-sandbox',
@@ -31,7 +32,10 @@ export class WhatsappService implements OnModuleInit {
           '--disable-accelerated-2d-canvas',
           '--no-first-run',
           '--no-zygote',
-          '--disable-gpu'
+          '--disable-gpu',
+          '--disable-background-timer-throttling',
+          '--disable-backgrounding-occluded-windows',
+          '--disable-renderer-backgrounding'
         ],
       },
     });

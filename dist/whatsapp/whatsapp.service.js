@@ -20,6 +20,7 @@ let WhatsappService = class WhatsappService {
         this.client = new whatsapp_web_js_1.Client({
             puppeteer: {
                 headless: true,
+                executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
                 args: [
                     '--no-sandbox',
                     '--disable-setuid-sandbox',
@@ -27,7 +28,10 @@ let WhatsappService = class WhatsappService {
                     '--disable-accelerated-2d-canvas',
                     '--no-first-run',
                     '--no-zygote',
-                    '--disable-gpu'
+                    '--disable-gpu',
+                    '--disable-background-timer-throttling',
+                    '--disable-backgrounding-occluded-windows',
+                    '--disable-renderer-backgrounding'
                 ],
             },
         });
