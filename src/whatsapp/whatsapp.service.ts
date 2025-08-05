@@ -24,7 +24,8 @@ export class WhatsappService implements OnModuleInit {
   async onModuleInit() {
     this.client = new Client({
       authStrategy: new (await import('whatsapp-web.js')).LocalAuth({
-        clientId: 'whatsapp-client',
+        clientId: `whatsapp-${Date.now()}`,
+        dataPath: './.wwebjs_auth'
       }),
       puppeteer: {
         headless: true,
@@ -42,9 +43,15 @@ export class WhatsappService implements OnModuleInit {
           '--disable-renderer-backgrounding',
           '--disable-extensions',
           '--disable-default-apps',
-          '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+          '--disable-web-security',
+          '--disable-features=VizDisplayCompositor',
+          '--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         ],
       },
+      webVersionCache: {
+        type: 'remote',
+        remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html',
+      }
     });
 
     this.client.on('qr', (qr) => {
@@ -59,10 +66,27 @@ export class WhatsappService implements OnModuleInit {
       console.log('✅ WhatsApp Client prêt!');
     });
 
+    this.client.on('authenticated', () => {
+      console.log('✅ Client authentifié avec succès!');
+    });
+
+    this.client.on('loading_screen', (percent, message) => {
+      console.log(`🔄 Chargement: ${percent}% - ${message}`);
+    });
+
     this.client.on('disconnected', (reason) => {
       console.log('❌ Client déconnecté:', reason);
+      console.log('❌ Raison détaillée:', JSON.stringify(reason));
       this.isReady = false;
       this.currentQR = '';
+      
+      // Tentative de reconnexion après déconnexion
+      setTimeout(() => {
+        console.log('🔄 Tentative de reconnexion...');
+        this.client.initialize().catch(err => {
+          console.error('❌ Erreur reconnexion:', err);
+        });
+      }, 5000);
     });
 
     this.client.on('auth_failure', (msg) => {

@@ -79,7 +79,7 @@ export class WhatsappController {
   @Get('qr-image')
   @ApiTags('whatsapp')
   @ApiOperation({ summary: 'Obtenir l\'image QR code pour connexion WhatsApp' })
-  @ApiResponse({ status: 200, description: 'Image QR code générée (PNG)' })
+  @ApiResponse({ status: 200, description: 'Image PNG du QR code WhatsApp' })
   @ApiResponse({ status: 404, description: 'Aucun QR code disponible' })
   async getQRCodeImage(@Res() res: Response) {
     const qrBuffer = await this.whatsappService.getQRCodeImage();
