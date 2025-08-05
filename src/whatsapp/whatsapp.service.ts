@@ -1,6 +1,7 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { Client } from 'whatsapp-web.js';
 import * as qrcode from 'qrcode-terminal';
+import * as QRCode from 'qrcode';
 
 export interface MessageLog {
   numero: string;
@@ -154,6 +155,31 @@ export class WhatsappService implements OnModuleInit {
       qr: this.currentQR,
       isReady: this.isReady,
     };
+  }
+
+  async getQRCodeImage(): Promise<Buffer | null> {
+    if (!this.currentQR) {
+      return null;
+    }
+
+    try {
+      // Générer l'image QR code en PNG avec haute qualité
+      const qrBuffer = await QRCode.toBuffer(this.currentQR, {
+        type: 'png',
+        width: 512,
+        margin: 4,
+        color: {
+          dark: '#000000',
+          light: '#FFFFFF'
+        },
+        errorCorrectionLevel: 'M'
+      });
+      
+      return qrBuffer;
+    } catch (error) {
+      console.error('Erreur génération QR image:', error);
+      return null;
+    }
   }
 
   getStatus() {
