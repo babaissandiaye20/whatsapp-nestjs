@@ -22,6 +22,9 @@ export class WhatsappService implements OnModuleInit {
 
   async onModuleInit() {
     this.client = new Client({
+      authStrategy: new (await import('whatsapp-web.js')).LocalAuth({
+        clientId: 'whatsapp-client',
+      }),
       puppeteer: {
         headless: true,
         executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
@@ -35,14 +38,18 @@ export class WhatsappService implements OnModuleInit {
           '--disable-gpu',
           '--disable-background-timer-throttling',
           '--disable-backgrounding-occluded-windows',
-          '--disable-renderer-backgrounding'
+          '--disable-renderer-backgrounding',
+          '--disable-extensions',
+          '--disable-default-apps',
+          '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         ],
       },
     });
 
     this.client.on('qr', (qr) => {
       this.currentQR = qr;
-      console.log('📱 QR Code généré! Scannez avec WhatsApp');
+      console.log('📱 QR Code généré! URL:', qr);
+      console.log('📱 QR Code length:', qr.length);
       qrcode.generate(qr, { small: true });
     });
 
@@ -54,6 +61,12 @@ export class WhatsappService implements OnModuleInit {
     this.client.on('disconnected', (reason) => {
       console.log('❌ Client déconnecté:', reason);
       this.isReady = false;
+      this.currentQR = '';
+    });
+
+    this.client.on('auth_failure', (msg) => {
+      console.error('❌ Échec d\'authentification:', msg);
+      this.currentQR = '';
     });
 
     await this.client.initialize();
@@ -152,5 +165,22 @@ export class WhatsappService implements OnModuleInit {
         0,
       ),
     };
+  }
+
+  async resetWhatsApp() {
+    try {
+      if (this.client) {
+        await this.client.destroy();
+      }
+      this.isReady = false;
+      this.currentQR = '';
+      
+      // Reinitialize client
+      await this.onModuleInit();
+      
+      return { success: true, message: 'WhatsApp client reset successfully' };
+    } catch (error) {
+      return { success: false, message: 'Failed to reset WhatsApp client', error: error.message };
+    }
   }
 }

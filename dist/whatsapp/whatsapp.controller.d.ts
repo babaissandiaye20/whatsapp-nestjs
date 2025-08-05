@@ -31,6 +31,15 @@ export declare class WhatsappController {
         totalNumbers: number;
         totalMessages: number;
     };
+    resetWhatsApp(): Promise<{
+        success: boolean;
+        message: string;
+        error?: undefined;
+    } | {
+        success: boolean;
+        message: string;
+        error: any;
+    }>;
     health(): {
         status: string;
         timestamp: Date;

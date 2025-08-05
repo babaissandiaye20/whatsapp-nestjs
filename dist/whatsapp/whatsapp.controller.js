@@ -46,6 +46,9 @@ let WhatsappController = class WhatsappController {
     getStatus() {
         return this.whatsappService.getStatus();
     }
+    async resetWhatsApp() {
+        return await this.whatsappService.resetWhatsApp();
+    }
     health() {
         return {
             status: 'OK',
@@ -121,6 +124,15 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", void 0)
 ], WhatsappController.prototype, "getStatus", null);
+__decorate([
+    (0, common_1.Post)('reset'),
+    (0, swagger_1.ApiTags)('whatsapp'),
+    (0, swagger_1.ApiOperation)({ summary: 'Redémarrer le client WhatsApp' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Client WhatsApp redémarré avec succès' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], WhatsappController.prototype, "resetWhatsApp", null);
 __decorate([
     (0, common_1.Get)('health'),
     (0, swagger_1.ApiTags)('health'),

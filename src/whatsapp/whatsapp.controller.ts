@@ -83,6 +83,14 @@ export class WhatsappController {
     return this.whatsappService.getStatus();
   }
 
+  @Post('reset')
+  @ApiTags('whatsapp')
+  @ApiOperation({ summary: 'Redémarrer le client WhatsApp' })
+  @ApiResponse({ status: 200, description: 'Client WhatsApp redémarré avec succès' })
+  async resetWhatsApp() {
+    return await this.whatsappService.resetWhatsApp();
+  }
+
   @Get('health')
   @ApiTags('health')
   @ApiOperation({ summary: 'Vérification de la santé de l\'API' })

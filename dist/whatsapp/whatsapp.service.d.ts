@@ -43,4 +43,13 @@ export declare class WhatsappService implements OnModuleInit {
         totalNumbers: number;
         totalMessages: number;
     };
+    resetWhatsApp(): Promise<{
+        success: boolean;
+        message: string;
+        error?: undefined;
+    } | {
+        success: boolean;
+        message: string;
+        error: any;
+    }>;
 }
