@@ -1,0 +1,98 @@
+import { Controller, Post, Get, Body, Param, HttpException, HttpStatus } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiParam } from '@nestjs/swagger';
+import { WhatsappService } from './whatsapp.service';
+import { SendMessageDto } from './dto/send-message.dto';
+
+@ApiTags('whatsapp')
+@Controller('whatsapp')
+export class WhatsappController {
+  constructor(private readonly whatsappService: WhatsappService) {}
+
+  @Post('send')
+  @ApiOperation({ 
+    summary: 'Envoyer un message WhatsApp',
+    description: 'Envoie un message WhatsApp de manière dynamique avec logging automatique'
+  })
+  @ApiBody({
+    description: 'Données pour envoyer un message',
+    examples: {
+      example1: {
+        summary: 'Message de validation',
+        value: {
+          from: '33123456789',
+          to: '33987654321',
+          message: 'Votre code de validation est: 123456'
+        }
+      }
+    }
+  })
+  @ApiResponse({ status: 200, description: 'Message envoyé avec succès' })
+  @ApiResponse({ status: 400, description: 'Données manquantes ou invalides' })
+  @ApiResponse({ status: 500, description: 'Erreur lors de l\'envoi du message' })
+  async sendMessage(@Body() body: SendMessageDto) {
+    const { from, to, message } = body;
+
+    if (!from || !to || !message) {
+      throw new HttpException(
+        'Les champs from, to et message sont requis',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    try {
+      const result = await this.whatsappService.sendMessage(from, to, message);
+      return result;
+    } catch (error) {
+      throw new HttpException(
+        error.message,
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Get('logs/:numero')
+  @ApiTags('logs')
+  @ApiOperation({ summary: 'Obtenir les logs d\'un numéro spécifique' })
+  @ApiParam({ name: 'numero', description: 'Numéro de téléphone', example: '33123456789' })
+  @ApiResponse({ status: 200, description: 'Logs du numéro récupérés' })
+  getMessageLogs(@Param('numero') numero: string) {
+    return this.whatsappService.getMessageLogs(numero);
+  }
+
+  @Get('logs')
+  @ApiTags('logs')
+  @ApiOperation({ summary: 'Obtenir tous les logs de messages' })
+  @ApiResponse({ status: 200, description: 'Tous les logs récupérés' })
+  getAllMessageLogs() {
+    return this.whatsappService.getMessageLogs();
+  }
+
+  @Get('qr')
+  @ApiTags('whatsapp')
+  @ApiOperation({ summary: 'Obtenir le QR code pour connexion WhatsApp' })
+  @ApiResponse({ status: 200, description: 'QR code généré' })
+  getQRCode() {
+    return this.whatsappService.getQRCode();
+  }
+
+  @Get('status')
+  @ApiTags('whatsapp')
+  @ApiOperation({ summary: 'Statut de la connexion WhatsApp' })
+  @ApiResponse({ status: 200, description: 'Statut de connexion et statistiques' })
+  getStatus() {
+    return this.whatsappService.getStatus();
+  }
+
+  @Get('health')
+  @ApiTags('health')
+  @ApiOperation({ summary: 'Vérification de la santé de l\'API' })
+  @ApiResponse({ status: 200, description: 'API fonctionnelle' })
+  health() {
+    return {
+      status: 'OK',
+      timestamp: new Date(),
+      service: 'WhatsApp NestJS API',
+      port: 4500,
+    };
+  }
+}

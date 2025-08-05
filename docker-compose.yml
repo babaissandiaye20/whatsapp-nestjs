@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  whatsapp-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "4500:4500"
+    environment:
+      - NODE_ENV=production
+      - PORT=4500
+    volumes:
+      # Persister les sessions WhatsApp
+      - whatsapp_sessions:/app/.wwebjs_auth
+      - whatsapp_cache:/app/.wwebjs_cache
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4500/whatsapp/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - whatsapp-network
+
+  # Optionnel: Redis pour cache (si besoin plus tard)
+  # redis:
+  #   image: redis:7-alpine
+  #   restart: unless-stopped
+  #   networks:
+  #     - whatsapp-network
+  #   volumes:
+  #     - redis_data:/data
+
+volumes:
+  whatsapp_sessions:
+    driver: local
+  whatsapp_cache:
+    driver: local
+  # redis_data:
+  #   driver: local
+
+networks:
+  whatsapp-network:
+    driver: bridge
