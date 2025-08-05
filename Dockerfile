@@ -17,13 +17,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Copier les fichiers de package et installer les dépendances
+# Copier les fichiers de package et installer TOUTES les dépendances
 COPY package*.json ./
 RUN npm ci && npm cache clean --force
 
 # Copier le code source et builder
 COPY . .
-RUN npm run build && npm prune --omit=dev
+RUN npm run build
+
+# Supprimer les devDependencies après le build
+RUN npm prune --omit=dev
 
 # Créer un utilisateur non-root
 RUN groupadd -r whatsapp && useradd -r -g whatsapp whatsapp
